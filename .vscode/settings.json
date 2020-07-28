@@ -1,6 +1,13 @@
 {
     "cSpell.words": [
         "Adafruit",
-        "Arduino"
+        "Arduino",
+        "FPSTR",
+        "Wifi",
+        "analog",
+        "millis",
+        "println",
+        "sptime",
+        "verdana"
     ]
 }

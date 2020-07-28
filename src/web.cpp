@@ -105,10 +105,6 @@ void setupWebServer()
     webServer.onNotFound(handleNotFound);
 }
 
-String otaMsgL1;
-String otaMsgL2;
-String otaMsgL3;
-
 void setupOta()
 {
     ArduinoOTA.setHostname("wallclock");
@@ -116,26 +112,30 @@ void setupOta()
     // No authentication by default
     //ArduinoOTA.setPassword((const char *)"xxxxx");
     ArduinoOTA.onStart([]() {
-        otaMsgL1 = F("OTA Start");
-        Serial.println(otaMsgL1);
+        Serial.println(F("OTA Start"));
+        ticker.detach();
+        matrix.setBrightness(14u);
     });
 
     ArduinoOTA.onEnd([]() {
-        otaMsgL1 = F("OTA End");
-        otaMsgL2 = F("Rebooting...");
-        Serial.println(otaMsgL1);
-        Serial.println(otaMsgL2);
+        Serial.println(F("OTA End"));
+        Serial.println(F("Rebooting..."));
+        matrix.printError();
+        matrix.writeDisplay();
     });
 
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-        otaMsgL1 = String(F("OTA: ")) + String(progress / (total / 100)) + String(F("%"));
-        otaMsgL2 = F("Download...");
-        Serial.println(otaMsgL1);
+        Serial.println(String(F("OTA: ")) + String(progress / (total / 100)) + String(F("%")));
+        matrix.print(progress / (total / 100));
+        matrix.writeDisplay();
     });
 
     ArduinoOTA.onError([](ota_error_t error) {
-        otaMsgL1 = F("OTA Error");
-        otaMsgL2 = String(F("Error[")) + String(error) + String(F("]"));
+        Serial.println(F("OTA Error"));
+        Serial.println(F("Error["));
+        Serial.print(error);
+        Serial.println(F("]"));
+        String otaMsgL3;
         if (error == OTA_AUTH_ERROR)
         {
             otaMsgL3 = F("Auth Failed");
@@ -156,8 +156,10 @@ void setupOta()
         {
             otaMsgL3 = F("End Failed");
         }
-        Serial.println(otaMsgL1);
-        Serial.println(otaMsgL2);
         Serial.println(otaMsgL3);
+        matrix.clear();
+        matrix.writeDigitNum(0u, 0xE, false);
+        matrix.writeDigitNum(4u, error, false);
+        matrix.writeDisplay();
     });
 }

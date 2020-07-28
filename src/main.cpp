@@ -4,7 +4,6 @@
 #include <ESP8266mDNS.h>
 #include <ArduinoOTA.h>
 #include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
-#include <Ticker.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -15,11 +14,13 @@
 Adafruit_7segment matrix = Adafruit_7segment();
 
 static const uint timeout = 120u; // seconds to run config portal for.
-static const uint BUTTON_PIN = 0u; // Define pin the button is connected to
+static const uint8_t BUTTON_PIN = 4u; // Button pin
+static const uint8_t led_blue = 13;
+static const uint8_t led_red = 15;
+static const uint8_t led_green = 12;
 
 Ticker ticker;
 static ulong connectedTimeStamp = 0u;
-static ulong connectedTimeStampReconnect = 0u;
 
 static String ntpServer1(FPSTR("ntp1.sptime.se"));
 static String ntpServer2(FPSTR("ntp2.sptime.se"));
@@ -35,10 +36,20 @@ void setup()
     Serial.begin(115200);
     Serial.println(F("Booting..."));
     matrix.begin(0x70);
+    matrix.setBrightness(0u);
+    matrix.writeDigitNum(0u, 0x8, true);
+    matrix.writeDigitNum(1u, 0x8, true);
+    matrix.writeDigitNum(3u, 0x8, true);
+    matrix.writeDigitNum(4u, 0x8, true);
+    matrix.drawColon(true);
+    matrix.writeDisplay();
 
     //set LED pin as output
     pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, HIGH);
+    pinMode(led_red, OUTPUT);
+    pinMode(led_green, OUTPUT);
+    pinMode(led_blue, OUTPUT);
+    analogWrite(LED_BUILTIN, 50u);
 
     //To make Arduino software autodetect OTA device
     TelnetServer.begin();
@@ -98,10 +109,8 @@ void setup()
         Serial.println(F("failed to mount FS"));
     }
 
-    ticker.detach();
     ticker.attach_scheduled(1, secTicker); // Run a 1 second interval Ticker
     connectedTimeStamp = millis();
-    connectedTimeStampReconnect = connectedTimeStamp;
 }
 
 static bool setupDone = false;
@@ -160,9 +169,16 @@ void loop()
 
         // set configportal timeout
         wm.setConfigPortalTimeout(timeout);
+        matrix.writeDigitNum(0u, 0xF, false);
+        matrix.writeDigitNum(1u, 0xF, false);
+        matrix.writeDigitNum(3u, 0xF, false);
+        matrix.writeDigitNum(4u, 0xF, false);
+        matrix.writeDisplay();
 
         if (!wm.startConfigPortal("WallClockAP"))
         {
+            matrix.printError();
+            matrix.writeDisplay();
             Serial.println(F("failed to connect and hit timeout"));
             delay(3000);
             ESP.restart();
@@ -176,13 +192,13 @@ void loop()
         //if you get here you have connected to the WiFi
         Serial.println(F("Connected to WIFI!"));
         connectedTimeStamp = millis();
-        connectedTimeStampReconnect = connectedTimeStamp;
     }
 
     if (WiFi.isConnected())
     {
         if (!setupDone)
         {
+            digitalWrite(LED_BUILTIN, HIGH);
             ArduinoOTA.begin();
             webServer.begin();
             Serial.println(F("Ready"));
@@ -197,9 +213,12 @@ void loop()
     }
     else
     {
+        analogWrite(LED_BUILTIN, 10u);
         setupDone = false;
         if (millis() > (CONNECT_FAILED_TIMEOUT_RESTART + connectedTimeStamp))
         {
+            matrix.printError();
+            matrix.writeDisplay();
             Serial.println(F("failed to connect and hit timeout, restart to try again."));
             delay(3000);
             ESP.restart();
@@ -208,58 +227,19 @@ void loop()
     }
 }
 
-// define directions for LED fade
-#define UP 0
-#define DOWN 1
-
-// constants for min and max PWM
-const int minPWM = 100;
-
-// State Variable for Fade Direction
-byte fadeDirection = UP;
-
-// Global Fade Value
-// but be bigger than byte and signed, for rollover
-int fadeValue = 0;
-
-// How smooth to fade?
-const byte fadeIncrement = 20;
-
-// How fast to increment?
-const unsigned int fadeInterval = 50;
-
-void doTheFade(uint8_t pin)
-{
-    if (fadeDirection == UP)
-    {
-        fadeValue = fadeValue + fadeIncrement;
-        if (fadeValue >= PWMRANGE)
-        {
-            // At max, limit and change direction
-            fadeValue = PWMRANGE;
-            fadeDirection = DOWN;
-        }
-    }
-    else
-    {
-        //if we aren't going up, we're going down
-        fadeValue = fadeValue - fadeIncrement;
-        if (fadeValue <= minPWM)
-        {
-            // At min, limit and change direction
-            fadeValue = minPWM;
-            fadeDirection = UP;
-        }
-    }
-    // Only need to update when it changes
-    analogWrite(pin, fadeValue);
-}
+static uint8_t tick = 0u;
 
 void secTicker()
 {
-    if (!setupDone)
+    if (!WiFi.isConnected())
     {
-        doTheFade(LED_BUILTIN);
+        matrix.print(tick, DEC);
+        matrix.writeDisplay();
+        Serial.println(F("No WiFi or waiting for Wifi"));
+        Serial.print(F("Millis: "));
+        Serial.print(millis());
+        Serial.print(F(" reset at: "));
+        Serial.println(CONNECT_FAILED_TIMEOUT_RESTART + connectedTimeStamp);
     }
     else
     {
@@ -267,11 +247,46 @@ void secTicker()
         time(&t);
         struct tm *timeinfo = localtime(&t);
         Serial.printf("%04d-%02d-%02d %02d:%02d:%02d\n", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-        digitalWrite(LED_BUILTIN, HIGH);
 
-        float tmpTime = timeinfo->tm_hour + (float)timeinfo->tm_min / 100;
-        matrix.print(tmpTime);
+        if (timeinfo->tm_year > 100)
+        {
+            if (0u == timeinfo->tm_hour && 0u == timeinfo->tm_min)
+            {
+                matrix.clear();
+                matrix.writeDigitNum(1u, 0u, false);
+                matrix.writeDigitNum(3u, 0u, false);
+                matrix.writeDigitNum(4u, 0u, false);
+            }
+            else
+            {
+                float tmpTime = timeinfo->tm_hour + (float)timeinfo->tm_min / 100;
+                matrix.print(tmpTime);
+            }
+        }
+        else
+        {
+            matrix.print(tick, DEC);
+        }
         matrix.drawColon(true);
         matrix.writeDisplay();
     }
+
+    {
+        int adVal = analogRead(A0);
+        uint8_t brightness = 0u;
+        if (adVal > 120)
+        {
+            brightness = 1u;
+        }
+        if (adVal > 200)
+        {
+            brightness = 5u;
+        }
+        if (adVal > 300)
+        {
+            brightness = 15u;
+        }
+        matrix.setBrightness(brightness);
+    }
+    tick++;
 }
