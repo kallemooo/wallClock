@@ -1,23 +1,34 @@
+/**
+ * @file web.cpp
+ * @brief Webserver handler
+ *
+ * @copyright Copyright (c) 2021
+ *
+ */
+
+#include <FS.h>          //this needs to be first, or it all crashes and burns...
 #include <Arduino.h>
-#include <LittleFS.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266mDNS.h>
-#include <ArduinoOTA.h>
 #include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
+#include <SPIFFS.h>
+#include <ArduinoOTA.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <Wire.h>
-#include <TZ.h>
 #include <sntp.h>
 #include "common.h"
 
 Adafruit_7segment matrix = Adafruit_7segment();
 
+const char TZ_Europe_Stockholm[]                  PROGMEM = "CET-1CEST,M3.5.0,M10.5.0/3";
+
+// setting PWM properties
+const int freq = 5000;
+const int ledChannel = 0;
+const int resolution = 8;
+
 static const uint timeout = 120u; // seconds to run config portal for.
-static const uint8_t BUTTON_PIN = 4u; // Button pin
-static const uint8_t led_blue = 13;
-static const uint8_t led_red = 15;
-static const uint8_t led_green = 12;
+
+static const uint8_t BUTTON_PIN = 0;
 
 Ticker ticker;
 static ulong connectedTimeStamp = 0u;
@@ -28,8 +39,13 @@ static String ntpServer3(FPSTR("pool.ntp.org"));
 
 const char settingsFile[] = "/config.json";
 
-// To make Arduino software autodetect OTA device
-WiFiServer TelnetServer(8266);
+WiFiManager wm; // global wm instance
+WiFiManagerParameter ntpServer1Param;
+WiFiManagerParameter ntpServer2Param;
+WiFiManagerParameter ntpServer3Param;
+
+//callback notifying us of the need to save config
+void saveConfigCallback();
 
 void setup()
 {
@@ -46,13 +62,12 @@ void setup()
 
     //set LED pin as output
     pinMode(LED_BUILTIN, OUTPUT);
-    pinMode(led_red, OUTPUT);
-    pinMode(led_green, OUTPUT);
-    pinMode(led_blue, OUTPUT);
-    analogWrite(LED_BUILTIN, 50u);
+    // configure LED PWM functionalitites
+    ledcSetup(ledChannel, freq, resolution);
 
-    //To make Arduino software autodetect OTA device
-    TelnetServer.begin();
+    // attach the channel to the GPIO to be controlled
+    ledcAttachPin(LED_BUILTIN, ledChannel);
+    ledcWrite(ledChannel, 255u);
 
     WiFi.mode(WIFI_STA);
     WiFi.hostname(F("wallclock"));
@@ -62,14 +77,14 @@ void setup()
 
     pinMode(BUTTON_PIN, INPUT);
 
-    if (LittleFS.begin())
+    if (SPIFFS.begin())
     {
         Serial.println(F("Mounted file system"));
-        if (LittleFS.exists(settingsFile))
+        if (SPIFFS.exists(settingsFile))
         {
             //file exists, reading and loading
             Serial.println(F("reading config file"));
-            File configFile = LittleFS.open(settingsFile, "r");
+            File configFile = SPIFFS.open(settingsFile, "r");
             if (configFile)
             {
                 Serial.println(F("opened config file"));
@@ -109,7 +124,34 @@ void setup()
         Serial.println(F("failed to mount FS"));
     }
 
-    ticker.attach_scheduled(1, secTicker); // Run a 1 second interval Ticker
+    new (&ntpServer1Param) WiFiManagerParameter("ntpServer1", "NTP server 1", ntpServer1.c_str(), 500u);
+    new (&ntpServer2Param) WiFiManagerParameter("ntpServer2", "NTP server 2", ntpServer2.c_str(), 500u);
+    new (&ntpServer3Param) WiFiManagerParameter("ntpServer3", "NTP server 3", ntpServer3.c_str(), 500u);
+
+    wm.addParameter(&ntpServer1Param);
+    wm.addParameter(&ntpServer2Param);
+    wm.addParameter(&ntpServer3Param);
+    wm.setSaveParamsCallback(saveConfigCallback);
+    wm.setDarkMode(true);
+
+    // set configportal timeout
+    wm.setConfigPortalTimeout(timeout);
+    bool res;
+    res = wm.autoConnect("WallClockAP"); // anonymous ap
+
+    if (!res)
+    {
+        Serial.println("Failed to connect or hit timeout");
+        // ESP.restart();
+    }
+    else
+    {
+        //if you get here you have connected to the WiFi
+        Serial.println("connected...yeey :)");
+        Serial.println(F("Connected to WIFI!"));
+    }
+
+    ticker.attach(1, secTicker); // Run a 1 second interval Ticker
     connectedTimeStamp = millis();
 }
 
@@ -117,17 +159,13 @@ static bool setupDone = false;
 static const ulong CONNECT_FAILED_TIMEOUT_RESTART = 10u * 60u * 1000u;
 static const ulong CONNECT_FAILED_TIMEOUT_RECONNECT = 30u * 1000u;
 
-WiFiManagerParameter *ntpServer1Param;
-WiFiManagerParameter *ntpServer2Param;
-WiFiManagerParameter *ntpServer3Param;
-
 //callback notifying us of the need to save config
 void saveConfigCallback()
 {
     // Fetch new values.
-    ntpServer1 = ntpServer1Param->getValue();
-    ntpServer2 = ntpServer2Param->getValue();
-    ntpServer3 = ntpServer3Param->getValue();
+    ntpServer1 = ntpServer1Param.getValue();
+    ntpServer2 = ntpServer2Param.getValue();
+    ntpServer3 = ntpServer3Param.getValue();
 
     Serial.println("saving config");
     StaticJsonDocument<500> jDoc;
@@ -135,7 +173,7 @@ void saveConfigCallback()
     jDoc[F("ntp_server2")] = ntpServer2;
     jDoc[F("ntp_server3")] = ntpServer3;
 
-    File configFile = LittleFS.open(settingsFile, "w");
+    File configFile = SPIFFS.open(settingsFile, "w");
     if (!configFile)
     {
         Serial.println(F("failed to open config file for writing"));
@@ -154,21 +192,11 @@ void loop()
     // is configuration portal requested?
     if (digitalRead(BUTTON_PIN) == LOW)
     {
+        ledcWrite(ledChannel, 255u);
+
         // Stop the web server as the config portal needs port 80.
         webServer.stop();
-        WiFiManager wm;
 
-        ntpServer1Param = new WiFiManagerParameter("ntpServer1", "NTP server 1", ntpServer1.c_str(), 100u);
-        ntpServer2Param = new WiFiManagerParameter("ntpServer2", "NTP server 2", ntpServer2.c_str(), 100u);
-        ntpServer3Param = new WiFiManagerParameter("ntpServer3", "NTP server 3", ntpServer3.c_str(), 100u);
-
-        wm.addParameter(ntpServer1Param);
-        wm.addParameter(ntpServer2Param);
-        wm.addParameter(ntpServer3Param);
-        wm.setSaveParamsCallback(saveConfigCallback);
-
-        // set configportal timeout
-        wm.setConfigPortalTimeout(timeout);
         matrix.writeDigitNum(0u, 0xF, false);
         matrix.writeDigitNum(1u, 0xF, false);
         matrix.writeDigitNum(3u, 0xF, false);
@@ -185,20 +213,16 @@ void loop()
             delay(5000);
         }
 
-        delete ntpServer1Param;
-        delete ntpServer2Param;
-        delete ntpServer3Param;
-
         //if you get here you have connected to the WiFi
         Serial.println(F("Connected to WIFI!"));
         connectedTimeStamp = millis();
+        setupDone = false;
     }
 
     if (WiFi.isConnected())
     {
         if (!setupDone)
         {
-            digitalWrite(LED_BUILTIN, HIGH);
             ArduinoOTA.begin();
             webServer.begin();
             Serial.println(F("Ready"));
@@ -206,6 +230,7 @@ void loop()
             Serial.println(WiFi.localIP());
             configTzTime(TZ_Europe_Stockholm, ntpServer1.c_str(), ntpServer2.c_str(), ntpServer3.c_str());
             setupDone = true;
+            ledcWrite(ledChannel, 1u);
         }
 
         webServer.handleClient();
@@ -213,7 +238,7 @@ void loop()
     }
     else
     {
-        analogWrite(LED_BUILTIN, 10u);
+        ledcWrite(ledChannel, 255u);
         setupDone = false;
         if (millis() > (CONNECT_FAILED_TIMEOUT_RESTART + connectedTimeStamp))
         {

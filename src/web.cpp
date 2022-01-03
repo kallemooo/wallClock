@@ -2,21 +2,34 @@
  * @file web.cpp
  * @brief Webserver handler
  *
- * @copyright Copyright (c) 2020
+ * @copyright Copyright (c) 2021
  *
  */
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+#include <WiFi.h>
+#include <WebServer.h>
 #include <ArduinoOTA.h>
+#include <strings_en.h>
 #include "common.h"
 
-const char WALLCLOCK_HTTP_HEADER[] PROGMEM = "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1, user-scalable=no\"/><title>{v}</title>";
-const char WALLCLOCK_HTTP_STYLE[] PROGMEM = "<style>.c{text-align: center;} div,input{padding:5px;font-size:1em;} input{width:95%;} body{text-align: center;font-family:verdana;} button{border:0;border-radius:0.3rem;background-color:#1fa3ec;color:#fff;line-height:2.4rem;font-size:1.2rem;width:100%;} .q{float: right;width: 64px;text-align: right;} .l{background: url(\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAALVBMVEX///8EBwfBwsLw8PAzNjaCg4NTVVUjJiZDRUUUFxdiZGSho6OSk5Pg4eFydHTCjaf3AAAAZElEQVQ4je2NSw7AIAhEBamKn97/uMXEGBvozkWb9C2Zx4xzWykBhFAeYp9gkLyZE0zIMno9n4g19hmdY39scwqVkOXaxph0ZCXQcqxSpgQpONa59wkRDOL93eAXvimwlbPbwwVAegLS1HGfZAAAAABJRU5ErkJggg==\") no-repeat left center;background-size: 1em;}</style>";
-const char WALLCLOCK_HTTP_HEADER_END[] PROGMEM = "</head><body><div style='text-align:left;display:inline-block;min-width:260px;'>";
-const char WALLCLOCK_HTTP_END[] PROGMEM = "</div></body></html>";
+WebServer webServer(80);
 
-ESP8266WebServer webServer(80);
+String getHTTPHead(String title)
+{
+    String page;
+    page += FPSTR(HTTP_HEAD_START);
+    page.replace(FPSTR(T_v), title);
+    page += FPSTR(HTTP_SCRIPT);
+    page += FPSTR(HTTP_STYLE);
+
+    {
+        String p = FPSTR(HTTP_HEAD_END);
+        p.replace(FPSTR(T_c), "invert"); // add class str
+        page += p;
+    }
+
+    return page;
+}
 
 /**
  * @brief Root page of the webserver.
@@ -31,11 +44,11 @@ void handleRoot()
 
     sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 
-    String page = FPSTR(WALLCLOCK_HTTP_HEADER);
-    page.replace("{v}", "Wall clock status");
-    page += FPSTR(WALLCLOCK_HTTP_STYLE);
-    page += FPSTR(WALLCLOCK_HTTP_HEADER_END);
-    page += F("<h1>Wall clock status</h1>");
+    String page = getHTTPHead("Minidisplay status");
+    String str = FPSTR(HTTP_ROOT_MAIN);
+    str.replace(FPSTR(T_t), "Minidisplay status");
+    str.replace(FPSTR(T_v), (String)WiFi.getHostname() + " - " + WiFi.localIP().toString());
+    page += str;
     page += F("<dl>");
     page += F("<dt>Current time</dt><dd>");
     page += buf;
@@ -43,26 +56,23 @@ void handleRoot()
     page += F("<dt>ADC value</dt><dd>");
     page += analogRead(A0);
     page += F("</dd>");
-    page += F("<dt>Chip ID</dt><dd>");
-    page += ESP.getChipId();
+    page += F("<dt>Chip cores</dt><dd>");
+    page += ESP.getChipCores();
     page += F("</dd>");
-    page += F("<dt>Flash Chip ID</dt><dd>");
-    page += ESP.getFlashChipId();
+    page += F("<dt>Chip model</dt><dd>");
+    page += ESP.getChipModel();
     page += F("</dd>");
-    page += F("<dt>IDE Flash Size</dt><dd>");
+    page += F("<dt>Chip revision</dt><dd>");
+    page += ESP.getChipRevision();
+    page += F("</dd>");
+    page += F("<dt>Flash Size</dt><dd>");
     page += ESP.getFlashChipSize();
-    page += F(" bytes</dd>");
-    page += F("<dt>Real Flash Size</dt><dd>");
-    page += ESP.getFlashChipRealSize();
     page += F(" bytes</dd>");
     page += F("<dt>Sketch size</dt><dd>");
     page += ESP.getSketchSize();
     page += F("</dd>");
     page += F("<dt>Free sketch space</dt><dd>");
     page += ESP.getFreeSketchSpace();
-    page += F("</dd>");
-    page += F("<dt>Core version</dt><dd>");
-    page += ESP.getCoreVersion();
     page += F("</dd>");
     page += F("<dt>Sdk version</dt><dd>");
     page += ESP.getSdkVersion();
@@ -77,9 +87,9 @@ void handleRoot()
     page += ESP.getFreeHeap();
     page += F("</dd>");
     page += F("</dl>");
-    page += FPSTR(WALLCLOCK_HTTP_END);
+    page += FPSTR(HTTP_END);
 
-    webServer.send(200, "text/html", page);
+    webServer.send(200, FPSTR(HTTP_HEAD_CT), page);
 }
 
 void handleNotFound()
@@ -162,4 +172,5 @@ void setupOta()
         matrix.writeDigitNum(4u, error, false);
         matrix.writeDisplay();
     });
+    ArduinoOTA.begin();
 }

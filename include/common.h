@@ -2,14 +2,14 @@
  * @file common.h
  * @brief Common defines.
  *
- * @copyright Copyright (c) 2020
+ * @copyright Copyright (c) 2021
  *
  */
 #ifndef COMMON_H
 #define COMMON_H
 
 #include <Arduino.h>
-#include <ESP8266WebServer.h>
+#include <WebServer.h>
 #include <Adafruit_LEDBackpack.h>
 #include <Ticker.h>
 
@@ -19,7 +19,7 @@ void secTicker();
 void setupWebServer();
 void setupOta();
 
-extern ESP8266WebServer webServer;
+extern WebServer webServer;
 extern Adafruit_7segment matrix;
 extern Ticker ticker;
 
