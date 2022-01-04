@@ -2,7 +2,7 @@
  * @file web.cpp
  * @brief Webserver handler
  *
- * @copyright Copyright (c) 2021
+ * @copyright Copyright (c) 2021 Karl Thorén
  *
  */
 
@@ -15,6 +15,7 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <sntp.h>
+#include <uptime.h>
 #include "common.h"
 
 Adafruit_7segment matrix = Adafruit_7segment();
@@ -191,6 +192,8 @@ String scrollString;
 
 void loop()
 {
+    uptime::calculateUptime();
+
     // is configuration portal requested?
     if (digitalRead(BUTTON_PIN) == LOW)
     {

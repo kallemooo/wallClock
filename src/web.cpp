@@ -2,7 +2,7 @@
  * @file web.cpp
  * @brief Webserver handler
  *
- * @copyright Copyright (c) 2021
+ * @copyright Copyright (c) 2021 Karl Thorén
  *
  */
 #include <Arduino.h>

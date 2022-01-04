@@ -2,7 +2,7 @@
  * @file common.h
  * @brief Common defines.
  *
- * @copyright Copyright (c) 2021
+ * @copyright Copyright (c) 2021 Karl Thorén
  *
  */
 #ifndef COMMON_H
