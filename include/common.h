@@ -22,5 +22,6 @@ void setupOta();
 extern WebServer webServer;
 extern Adafruit_7segment matrix;
 extern Ticker ticker;
+extern uint16_t ldrAdVal;
 
 #endif // COMMON_H

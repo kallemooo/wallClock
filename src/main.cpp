@@ -62,7 +62,7 @@ void setup()
 
     //set LED pin as output
     pinMode(LED_BUILTIN, OUTPUT);
-    // configure LED PWM functionalitites
+    // configure LED PWM functionalities
     ledcSetup(ledChannel, freq, resolution);
 
     // attach the channel to the GPIO to be controlled
@@ -147,9 +147,11 @@ void setup()
     else
     {
         //if you get here you have connected to the WiFi
-        Serial.println("connected...yeey :)");
         Serial.println(F("Connected to WIFI!"));
     }
+
+    adcAttachPin(A0);
+    analogSetClockDiv(5);
 
     ticker.attach(1, secTicker); // Run a 1 second interval Ticker
     connectedTimeStamp = millis();
@@ -252,7 +254,32 @@ void loop()
     }
 }
 
+#define FILTER_LEN  5
+
+static uint16_t AN_LDR_Buffer[FILTER_LEN] = {0};
+static uint32_t AN_LDR_i = 0;
+
+uint16_t readADC_Avg(uint16_t ADC_Raw)
+{
+    uint32_t i = 0;
+    uint32_t Sum = 0;
+
+    AN_LDR_Buffer[AN_LDR_i++] = ADC_Raw;
+    if (AN_LDR_i == FILTER_LEN)
+    {
+        AN_LDR_i = 0;
+    }
+
+    for (i=0; i < FILTER_LEN; i++)
+    {
+        Sum += AN_LDR_Buffer[i];
+    }
+
+    return (Sum/FILTER_LEN);
+}
+
 static uint8_t tick = 0u;
+uint16_t ldrAdVal = 0;
 
 void secTicker()
 {
@@ -271,7 +298,7 @@ void secTicker()
         time_t t;
         time(&t);
         struct tm *timeinfo = localtime(&t);
-        Serial.printf("%04d-%02d-%02d %02d:%02d:%02d\n", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+        Serial.printf("T: %04d-%02d-%02d %02d:%02d:%02d\n", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 
         if (timeinfo->tm_year > 100)
         {
@@ -297,21 +324,25 @@ void secTicker()
     }
 
     {
-        int adVal = analogRead(A0);
         uint8_t brightness = 0u;
-        if (adVal > 120)
+        uint16_t adValRaw = analogRead(A0);
+        ldrAdVal = readADC_Avg(adValRaw);
+
+        if (ldrAdVal < 600u)
         {
-            brightness = 1u;
+            brightness = 0u;
         }
-        if (adVal > 200)
+        else
         {
-            brightness = 5u;
+            brightness = (ldrAdVal - 500u)/100u;
+            if (brightness > 15u)
+            {
+                brightness = 15u;
+            }
         }
-        if (adVal > 300)
-        {
-            brightness = 15u;
-        }
+
         matrix.setBrightness(brightness);
+        Serial.printf("A0: %04d Avg: %02d B; %02d\n", adValRaw, ldrAdVal, brightness);
     }
     tick++;
 }

@@ -10,6 +10,7 @@
 #include <WebServer.h>
 #include <ArduinoOTA.h>
 #include <strings_en.h>
+#include <uptime_formatter.h>
 #include "common.h"
 
 WebServer webServer(80);
@@ -53,8 +54,11 @@ void handleRoot()
     page += F("<dt>Current time</dt><dd>");
     page += buf;
     page += F("</dd>");
+    page += F("<dt>Uptime</dt><dd>");
+    page += uptime_formatter::getUptime();
+    page += F("</dd>");
     page += F("<dt>ADC value</dt><dd>");
-    page += analogRead(A0);
+    page += ldrAdVal;
     page += F("</dd>");
     page += F("<dt>Chip cores</dt><dd>");
     page += ESP.getChipCores();
