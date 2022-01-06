@@ -1,6 +1,6 @@
 /**
- * @file web.cpp
- * @brief Webserver handler
+ * @file main.cpp
+ * @brief Main class.
  *
  * @copyright Copyright (c) 2021 Karl Thorén
  *
@@ -142,7 +142,7 @@ void setup()
 
     if (!res)
     {
-        Serial.println("Failed to connect or hit timeout");
+        Serial.println(F("Failed to connect or hit timeout"));
         // ESP.restart();
     }
     else
@@ -170,7 +170,7 @@ void saveConfigCallback()
     ntpServer2 = ntpServer2Param.getValue();
     ntpServer3 = ntpServer3Param.getValue();
 
-    Serial.println("saving config");
+    Serial.println(F("saving config"));
     StaticJsonDocument<500> jDoc;
     jDoc[F("ntp_server1")] = ntpServer1;
     jDoc[F("ntp_server2")] = ntpServer2;

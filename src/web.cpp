@@ -25,7 +25,7 @@ String getHTTPHead(String title)
 
     {
         String p = FPSTR(HTTP_HEAD_END);
-        p.replace(FPSTR(T_c), "invert"); // add class str
+        p.replace(FPSTR(T_c), F("invert"));
         page += p;
     }
 
@@ -45,9 +45,9 @@ void handleRoot()
 
     sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 
-    String page = getHTTPHead("Minidisplay status");
+    String page = getHTTPHead(F("Wallclock status"));
     String str = FPSTR(HTTP_ROOT_MAIN);
-    str.replace(FPSTR(T_t), "Minidisplay status");
+    str.replace(FPSTR(T_t), F("Wallclock status"));
     str.replace(FPSTR(T_v), (String)WiFi.getHostname() + " - " + WiFi.localIP().toString());
     page += str;
     page += F("<dl>");
@@ -98,14 +98,14 @@ void handleRoot()
 
 void handleNotFound()
 {
-    String message = "File Not Found\n\n";
-    message += "URI: ";
+    String message = F("File Not Found\n\n");
+    message += F("URI: ");
     message += webServer.uri();
-    message += "\nMethod: ";
-    message += (webServer.method() == HTTP_GET) ? "GET" : "POST";
-    message += "\nArguments: ";
+    message += F("\nMethod: ");
+    message += (webServer.method() == HTTP_GET) ? F("GET") : F("POST");
+    message += F("\nArguments: ");
     message += webServer.args();
-    message += "\n";
+    message += F("\n");
     for (uint8_t i = 0; i < webServer.args(); i++)
     {
         message += " " + webServer.argName(i) + ": " + webServer.arg(i) + "\n";
